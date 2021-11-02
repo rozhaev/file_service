@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+
+  api:
+    container_name: api
+    restart: on-failure
+    build:
+      dockerfile: docker/app/Dockerfile
+      context: .
+      target: api
+    env_file:
+      - .env
+    volumes:
+      - ./poetry.lock:/project/poetry.lock
+      - ./pyproject.toml:/project/pyproject.toml
+    depends_on:
+      - postgres
+    links:
+      - postgres
+    ports:
+      - 8081:8081
+
+
+  worker:
+    container_name: worker
+    restart: on-failure
+    build:
+      dockerfile: docker/app/Dockerfile
+      context: .
+      target: worker
+    env_file:
+      - .env
+    command: celery worker --app=task_manager.celery --loglevel=info --logfile=logs/celery.log
+    volumes:
+      - ./poetry.lock:/project/poetry.lock
+      - ./pyproject.toml:/project/pyproject.toml
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - api
+      - redis
+
+  mongo:
+    container_name: mongo
+    image: mongo:latest
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+    ports:
+      - 27017:27017
+
+  redis:
+    image: redis:4-alpine
+
